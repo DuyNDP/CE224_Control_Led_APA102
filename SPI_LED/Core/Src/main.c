@@ -115,46 +115,33 @@ int main(void)
   HAL_TIM_Base_Start(&htim2);
   audio_init();
 
-  effect_startup_breathing(5);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  // Biến dùng để đếm thời gian tự chuyển hiệu ứng
-  uint32_t last_switch_effect = HAL_GetTick();
   while (1)
   {
+	  // --- TRƯỜNG HỢP 1: CHẾ ĐỘ CHỜ (RESET / BREATHING) ---
+	  if (effect_mode == 0)
+	     {
+	          effect_breathing_continuous();
+	     }
 
-	  process_audio_data();
+	     // --- TRƯỜNG HỢP 2: CÁC CHẾ ĐỘ NHẠY NHẠC (MODE 1 -> 7) ---
+	     else
+	     {
+	          // Kiểm tra xem đã thu đủ mẫu âm thanh từ Mic chưa?
+	          if (fft_process_flag == 1)
+	          {
+	              // 1. Xử lý FFT: Tính toán ra Volume và Hertz
+	              // (Hàm này sẽ tự động reset cờ fft_process_flag về 0 sau khi chạy xong)
+	              process_audio_data();
 
-	  // Gọi hàm LED mới với 2 biến kết quả từ FFT
-	  // audio_peak_val: Cường độ
-	  // audio_peak_hz:  Tần số
-
-	  // effect
-	  //led_run_single_effect(audio_peak_val, audio_peak_hz);
-	  //led_run_test_freq_color(audio_peak_val, audio_peak_hz);
-	  //led_run_test_rainbow(audio_peak_val);
-	  //effect_music_rain(audio_peak_val, audio_peak_hz);
-	  //effect_falling_rain(audio_peak_val, audio_peak_hz, 40);
-	  // effect_fire(smoothed_val);
-	  //effect_center_pulse(smoothed_val, hz);
-
-	  // Nếu muốn chạy luân phiên từng effect
-	  // 2. Chạy hiệu ứng LED (Non-blocking)
-	  led_effects_manager(audio_peak_val, audio_peak_hz);
-
-	  // 3. Tự động đổi hiệu ứng mỗi 15 giây (Demo Mode)
-	  if (HAL_GetTick() - last_switch_effect > 15000) {
-	      effect_mode++;
-	      if (effect_mode > 7) effect_mode = 1; // Quay lại hiệu ứng 1
-
-	      // Reset các biến trạng thái khi chuyển mode để tránh lỗi hiển thị
-	      for(int i=0; i<NUM_LEDS; i++) spi_set_led(i, 0,0,0,0);
-	      spi_update();
-
-	      last_switch_effect = HAL_GetTick();
-	  }
+	              // 2. Đẩy dữ liệu sang bộ xử lý LED
+	              // (Lấy kết quả từ biến toàn cục audio_peak_val đập vào effect)
+	              led_effects_manager(audio_peak_val, audio_peak_hz);
+	          }
+	     }
 
 	   // 4. Nghỉ cực ngắn để giảm tải CPU (giúp DMA chạy ổn định hơn)
 	   HAL_Delay(1);

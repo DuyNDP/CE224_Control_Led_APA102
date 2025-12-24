@@ -12,7 +12,7 @@
 
 // --- BIẾN TOÀN CỤC ---
 float smoothed_val = 0.0f;
-uint8_t effect_mode = 1;       // Mặc định chạy hiệu ứng 1
+uint8_t effect_mode = 0;
 uint16_t rainbow_hue = 0;
 
 // Buffer cho hiệu ứng Mưa & Lửa
@@ -63,30 +63,32 @@ void hsv_to_rgb(uint16_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_
 }
 
 // --- HIỆU ỨNG KHỞI ĐỘNG (BLOCKING) ---
-void effect_startup_breathing(uint8_t loop_count) {
-    uint16_t hue = 0;
-    uint8_t r, g, b;
-    for (int count = 0; count < loop_count; count++) {
-        // Fade In
-        for (int val = 0; val <= 255; val += 5) {
-            hsv_to_rgb(hue, 255, val, &r, &g, &b);
-            // Dùng MAX_BRIGHTNESS/2 để không quá chói lúc khởi động
-            for (int i = 0; i < NUM_LEDS; i++) spi_set_led(i, r, g, b, MAX_BRIGHTNESS);
-            spi_update();
-            HAL_Delay(5);
-        }
-        // Fade Out
-        for (int val = 255; val >= 0; val -= 5) {
-            hsv_to_rgb(hue, 255, val, &r, &g, &b);
-            for (int i = 0; i < NUM_LEDS; i++) set_pixel_color(i, r, g, b, MAX_BRIGHTNESS);
-            update_all_strips(); // Gửi cả SPI và UART
-            HAL_Delay(5);
-        }
-        hue += 60;
-        if (hue >= 360) hue = 0;
-    }
-}
+void effect_breathing_continuous(void) {
+    static uint32_t last_breath_tick = 0;
 
+    // Giới hạn tốc độ cập nhật để mắt nhìn thấy mượt (30ms/frame)
+    if (HAL_GetTick() - last_breath_tick < 30) return;
+    last_breath_tick = HAL_GetTick();
+
+    // Sử dụng hàm sin để tạo nhịp thở mượt mà
+    // Chu kỳ thở khoảng 3 giây
+    float time = (float)HAL_GetTick();
+    // sin chạy từ -1 đến 1 -> biến đổi thành 0.1 đến 1.0
+    float brightness_factor = (sin(time * 0.002f) + 1.0f) * 0.5f;
+
+    // Tính độ sáng thực tế (tối thiểu là 1 để không tắt hẳn)
+    uint8_t b_val = (uint8_t)(brightness_factor * MAX_BRIGHTNESS);
+    if (b_val < 1) b_val = 1;
+
+    // Set màu Cyan (Xanh ngọc) hoặc màu bạn thích
+    for (int i = 0; i < NUM_LEDS; i++) {
+        spi_set_led(i, 0, 100, 100, b_val); // R=0, G=100, B=100
+        usart_set_led(i, 0, 100, 100, b_val);
+    }
+
+    spi_update();
+    usart_update();
+}
 // --- 1. VU METER SMART ---
 void effect_vu_meter_smart(float vol, float hz) {
     static uint32_t last_tick = 0;
@@ -298,11 +300,15 @@ void effect_center_pulse(float vol, float hz) {
 
 // --- QUẢN LÝ CHÍNH ---
 void led_effects_manager(float raw_vol, float raw_hz) {
-    // 1. Lọc tín hiệu (Smoothing)
+    // 1. Lọc tín hiệu
     smoothed_val = (smoothed_val * 0.6f) + (raw_vol * 0.4f);
 
     // 2. Chọn hiệu ứng
     switch (effect_mode) {
+        case 0:
+            effect_breathing_continuous();
+            break;
+
         case 1: effect_vu_meter_smart(smoothed_val, raw_hz); break;
         case 2: effect_freq_color(smoothed_val, raw_hz); break;
         case 3: effect_rainbow_pulse(smoothed_val); break;
@@ -310,10 +316,10 @@ void led_effects_manager(float raw_vol, float raw_hz) {
         case 5: effect_falling_rain(smoothed_val, raw_hz, 40); break;
         case 6: effect_fire(smoothed_val); break;
         case 7: effect_center_pulse(smoothed_val, raw_hz); break;
+
         default:
-             // Tự động chuyển mode nếu = 0 hoặc số lạ
-             effect_vu_meter_smart(smoothed_val, raw_hz);
-             break;
+            effect_mode = 0;
+            break;
     }
 }
 
