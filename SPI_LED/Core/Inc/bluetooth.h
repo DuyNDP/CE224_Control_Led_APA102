@@ -71,7 +71,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                 break;
             case 'r':
             case 'R':
-                reset_system_effects();
                 break;
         }
         HAL_UART_Receive_IT(&huart2, (uint8_t*)&bt_rx_data, 1);

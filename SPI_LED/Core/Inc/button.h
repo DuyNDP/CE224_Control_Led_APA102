@@ -25,7 +25,6 @@
 // Các file khác (main.c, effect.h) sẽ dùng biến này để biết đang chạy hiệu ứng gì
 volatile uint8_t effect_mode_spi  = 0; // Mode cho dải SPI
 volatile uint8_t effect_mode_uart = 0; // Mode cho dải USART
-
 // --- BIẾN NỘI BỘ CHO XỬ LÝ NÚT ---
 typedef struct {
     GPIO_TypeDef* port;
@@ -94,26 +93,8 @@ void button_scan(void) {
     btn_uart.last_state = read_uart;
 
 
-    // 3. XỬ LÝ NÚT RESET
-    uint8_t read_rst = HAL_GPIO_ReadPin(btn_reset.port, btn_reset.pin);
-
-    // Khử rung cho nút Reset
-    if (read_rst != btn_reset.last_state) btn_reset.last_time = current_time;
-
-    if ((current_time - btn_reset.last_time) > DEBOUNCE_DELAY) {
-    	// Chỉ kích hoạt khi nhấn xuống (Active High)
-        if (read_rst == 1 && btn_reset.is_pressed == 0) {
-        	btn_reset.is_pressed = 1;
-
-            // ==> GỌI HÀM RESET TỪ EFFECT.H <==
-            reset_system_effects();
-        }
-
-        if (read_rst == 0) {
-        	btn_reset.is_pressed = 0;
-        }
-    }
-    btn_reset.last_state = read_rst;
 }
+
+
 
 #endif /* INC_BUTTON_H_ */

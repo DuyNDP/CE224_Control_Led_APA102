@@ -8,13 +8,11 @@
 #include <stdlib.h>
 #include <math.h>
 #include "knob.h"
-#include "SPI_LED.h"
 #include "UART_LED.h"
 
 // --- BIẾN TOÀN CỤC ---
 float smoothed_val = 0.0f;
 uint16_t rainbow_hue = 0;
-extern volatile uint8_t effect_mode_spi;
 extern volatile uint8_t effect_mode_uart;
 extern volatile uint32_t brightness;
 
@@ -30,7 +28,7 @@ uint8_t buffer_b[NUM_LEDS];
 
 // Hàm cập nhật dữ liệu ra cả 2 cổng
 void update_all_strips(void) {
-    spi_update();
+    usart_update();
     usart_update();
 }
 
@@ -44,7 +42,7 @@ void led_init()
 // --- HÀM SET MÀU CHUNG (QUAN TRỌNG) ---
 // Hàm này sẽ gán màu cho cả buffer SPI và buffer USART cùng lúc
 void set_pixel_color(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
-    spi_set_led(index, r, g, b, bright);
+    usart_set_led(index, r, g, b, bright);
     usart_set_led(index, r, g, b, bright);
 }
 
@@ -73,8 +71,8 @@ void effect_startup_breathing() {
     for (int val = 0; val <= 255; val += 5) {
     	hsv_to_rgb(hue, 255, val, &r, &g, &b);
     	// Dùng brightness/2 để không quá chói lúc khởi động
-        for (int i = 0; i < NUM_LEDS; i++) spi_set_led(i, r, g, b, brightness);
-        	spi_update();
+        for (int i = 0; i < NUM_LEDS; i++) usart_set_led(i, r, g, b, brightness);
+        	usart_update();
             HAL_Delay(30);
     }
     // Fade Out
@@ -108,12 +106,12 @@ void effect_vu_meter_smart(float vol, float hz) {
         if (i < num_lit) {
             uint16_t pixel_hue = (base_hue + (i * 2)) % 360;
             hsv_to_rgb(pixel_hue, 255, 255, &r, &g, &b);
-            spi_set_led(i, r, g, b, brightness);
+            usart_set_led(i, r, g, b, brightness);
         } else {
-            spi_set_led(i, 0, 0, 0, 0);
+            usart_set_led(i, 0, 0, 0, 0);
         }
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 2. FREQUENCY COLOR ---
@@ -135,14 +133,14 @@ void effect_freq_color(float vol, float hz) {
 
         for (int i = 0; i < NUM_LEDS; i++) {
             if (i >= center - width && i <= center + width)
-                spi_set_led(i, r, g, b, brightness);
+                usart_set_led(i, r, g, b, brightness);
             else
-                spi_set_led(i, 0, 0, 0, 0);
+                usart_set_led(i, 0, 0, 0, 0);
         }
     } else {
-        for(int i=0; i<NUM_LEDS; i++) spi_set_led(i, 0,0,0,0);
+        for(int i=0; i<NUM_LEDS; i++) usart_set_led(i, 0,0,0,0);
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 3. RAINBOW PULSE ---
@@ -163,9 +161,9 @@ void effect_rainbow_pulse(float vol) {
     for (int i = 0; i < NUM_LEDS; i++) {
         uint16_t pixel_hue = (rainbow_hue + (i * 360 / NUM_LEDS)) % 360;
         hsv_to_rgb(pixel_hue, 255, 255, &r, &g, &b);
-        spi_set_led(i, r, g, b, dyn_bright);
+        usart_set_led(i, r, g, b, dyn_bright);
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 4. MUSIC RAIN SPARKLE ---
@@ -199,12 +197,12 @@ void effect_music_rain(float vol, float hz) {
         if (rain_vals[i] > 0) {
             uint8_t r, g, b;
             hsv_to_rgb(rain_hues[i], 255, rain_vals[i], &r, &g, &b);
-            spi_set_led(i, r, g, b, brightness);
+            usart_set_led(i, r, g, b, brightness);
         } else {
-            spi_set_led(i, 0, 0, 0, 0);
+            usart_set_led(i, 0, 0, 0, 0);
         }
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 5. FALLING RAIN MATRIX ---
@@ -230,9 +228,9 @@ void effect_falling_rain(float vol, float hz, int speed_ms) {
     }
 
     for (int i = 0; i < NUM_LEDS; i++) {
-        spi_set_led(i, buffer_r[i], buffer_g[i], buffer_b[i], brightness);
+        usart_set_led(i, buffer_r[i], buffer_g[i], buffer_b[i], brightness);
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 6. FIRE EFFECT ---
@@ -268,9 +266,9 @@ void effect_fire(float vol) {
         else if( t192 > 0x40 ) { r = 255; g = heatramp; b = 0; }
         else { r = heatramp; g = 0; b = 0; }
 
-        spi_set_led(j, r, g, b, brightness);
+        usart_set_led(j, r, g, b, brightness);
     }
-    spi_update();
+    usart_update();
 }
 
 // --- 7. CENTER PULSE ---
@@ -290,11 +288,11 @@ void effect_center_pulse(float vol, float hz) {
 
     for (int i = 0; i < NUM_LEDS; i++) {
         if (i >= (center - width) && i <= (center + width))
-            spi_set_led(i, r, g, b, brightness);
+            usart_set_led(i, r, g, b, brightness);
         else
-            spi_set_led(i, 0, 0, 0, 0);
+            usart_set_led(i, 0, 0, 0, 0);
     }
-    spi_update();
+    usart_update();
 }
 
 // --- QUẢN LÝ CHÍNH ---
@@ -303,7 +301,7 @@ void led_effects_manager(float raw_vol, float raw_hz) {
     smoothed_val = (smoothed_val * 0.6f) + (raw_vol * 0.4f);
 
     // 2. Chọn hiệu ứng
-    switch (effect_mode_spi) {
+    switch (effect_mode_usart) {
     	case 0: effect_vu_meter_smart(smoothed_val, raw_hz); break;
         case 1: effect_vu_meter_smart(smoothed_val, raw_hz); break;
         case 2: effect_freq_color(smoothed_val, raw_hz); break;
@@ -318,7 +316,6 @@ void led_effects_manager(float raw_vol, float raw_hz) {
     }
     update_all_strips();
 }
-
 
 
 #endif /* INC_EFFECT_H_ */
