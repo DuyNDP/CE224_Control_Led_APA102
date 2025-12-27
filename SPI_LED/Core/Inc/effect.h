@@ -12,8 +12,9 @@
 
 // --- BIẾN TOÀN CỤC ---
 float smoothed_val = 0.0f;
-uint8_t effect_mode = 1;       // Mặc định chạy hiệu ứng 1
 uint16_t rainbow_hue = 0;
+extern volatile uint8_t effect_mode_spi;
+extern volatile uint8_t effect_mode_uart;
 
 // Buffer cho hiệu ứng Mưa & Lửa
 static uint16_t rain_hues[NUM_LEDS];
@@ -63,28 +64,26 @@ void hsv_to_rgb(uint16_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_
 }
 
 // --- HIỆU ỨNG KHỞI ĐỘNG (BLOCKING) ---
-void effect_startup_breathing(uint8_t loop_count) {
+void effect_startup_breathing() {
     uint16_t hue = 0;
     uint8_t r, g, b;
-    for (int count = 0; count < loop_count; count++) {
-        // Fade In
-        for (int val = 0; val <= 255; val += 5) {
-            hsv_to_rgb(hue, 255, val, &r, &g, &b);
-            // Dùng MAX_BRIGHTNESS/2 để không quá chói lúc khởi động
-            for (int i = 0; i < NUM_LEDS; i++) spi_set_led(i, r, g, b, MAX_BRIGHTNESS);
-            spi_update();
-            HAL_Delay(5);
-        }
-        // Fade Out
-        for (int val = 255; val >= 0; val -= 5) {
-            hsv_to_rgb(hue, 255, val, &r, &g, &b);
-            for (int i = 0; i < NUM_LEDS; i++) set_pixel_color(i, r, g, b, MAX_BRIGHTNESS);
-            update_all_strips(); // Gửi cả SPI và UART
-            HAL_Delay(5);
-        }
-        hue += 60;
-        if (hue >= 360) hue = 0;
+    // Fade In
+    for (int val = 0; val <= 255; val += 5) {
+    	hsv_to_rgb(hue, 255, val, &r, &g, &b);
+    	// Dùng MAX_BRIGHTNESS/2 để không quá chói lúc khởi động
+        for (int i = 0; i < NUM_LEDS; i++) spi_set_led(i, r, g, b, MAX_BRIGHTNESS);
+        	spi_update();
+            HAL_Delay(30);
     }
+    // Fade Out
+    for (int val = 255; val >= 0; val -= 5) {
+    	hsv_to_rgb(hue, 255, val, &r, &g, &b);
+        for (int i = 0; i < NUM_LEDS; i++) set_pixel_color(i, r, g, b, MAX_BRIGHTNESS);
+        	update_all_strips(); // Gửi cả SPI và UART
+            HAL_Delay(30);
+    }
+    hue += 60;
+    if (hue >= 360) hue = 0;
 }
 
 // --- 1. VU METER SMART ---
@@ -302,7 +301,8 @@ void led_effects_manager(float raw_vol, float raw_hz) {
     smoothed_val = (smoothed_val * 0.6f) + (raw_vol * 0.4f);
 
     // 2. Chọn hiệu ứng
-    switch (effect_mode) {
+    switch (effect_mode_spi) {
+    	case 0: effect_vu_meter_smart(smoothed_val, raw_hz); break;
         case 1: effect_vu_meter_smart(smoothed_val, raw_hz); break;
         case 2: effect_freq_color(smoothed_val, raw_hz); break;
         case 3: effect_rainbow_pulse(smoothed_val); break;
@@ -311,10 +311,28 @@ void led_effects_manager(float raw_vol, float raw_hz) {
         case 6: effect_fire(smoothed_val); break;
         case 7: effect_center_pulse(smoothed_val, raw_hz); break;
         default:
-             // Tự động chuyển mode nếu = 0 hoặc số lạ
-             effect_vu_meter_smart(smoothed_val, raw_hz);
-             break;
+        	effect_vu_meter_smart(smoothed_val, raw_hz);
+        	break;
     }
+    update_all_strips();
+}
+
+// --- HÀM RESET TOÀN BỘ HỆ THỐNG ---
+void reset_system_effects(void) {
+    // 1. Đưa mode về mặc định (hoặc mode bạn thích nhất)
+    effect_mode_spi = 0;
+    effect_mode_uart = 0;
+
+    // 2. Xóa sạch dữ liệu trong Buffer (về màu đen 0,0,0)
+    for (int i = 0; i < NUM_LEDS; i++) {
+        // Xóa buffer SPI
+        spi_set_led(i, 0, 0, 0, 0);
+        // Xóa buffer USART
+        usart_set_led(i, 0, 0, 0, 0);
+    }
+
+    // 3. Đẩy dữ liệu đen ra đèn ngay lập tức
+    update_all_strips();
 }
 
 #endif /* INC_EFFECT_H_ */

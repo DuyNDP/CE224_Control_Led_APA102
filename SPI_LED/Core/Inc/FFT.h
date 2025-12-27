@@ -11,6 +11,7 @@
 #include "main.h"
 #include "Config.h"
 #include "arm_math.h"
+#include "effect.h"
 
 extern ADC_HandleTypeDef hadc1;
 
@@ -91,6 +92,9 @@ void process_audio_data(void) {
         // Ép kiểu sang số nguyên để SWV vẽ cho đẹp
         debug_peak_val = (int32_t)audio_peak_val;
         debug_peak_hz  = (int32_t)audio_peak_hz;
+
+        // Gọi hàm chạy hiệu ứng
+        led_effects_manager(audio_peak_val, audio_peak_hz);
 
         // 6. Reset cờ
         fft_process_flag = 0;
