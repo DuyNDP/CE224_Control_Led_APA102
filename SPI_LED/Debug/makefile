@@ -60,8 +60,8 @@ all: main-build
 main-build: SPI_LED.elf secondary-outputs
 
 # Tool invocations
-SPI_LED.elf SPI_LED.map: $(OBJS) $(USER_OBJS) D:\E\1subject\HK5\hethongnhung\doan\SPI_LED\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "SPI_LED.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\E\1subject\HK5\hethongnhung\doan\SPI_LED\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SPI_LED.map" -Wl,--gc-sections -static -L../Middlewares/ST/ARM/DSP/Lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+SPI_LED.elf SPI_LED.map: $(OBJS) $(USER_OBJS) D:\E\1subject\HK5\hethongnhung\doan\CE224_Controll_Led_APA102\SPI_LED\STM32F407VETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "SPI_LED.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\E\1subject\HK5\hethongnhung\doan\CE224_Controll_Led_APA102\SPI_LED\STM32F407VETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SPI_LED.map" -Wl,--gc-sections -static -L../Middlewares/ST/ARM/DSP/Lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
