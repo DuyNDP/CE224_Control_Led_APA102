@@ -23,7 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include "FFT.h"
 #include "effect.h"
-
+#include "button.h"
+#include "bluetooth.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,11 +51,13 @@ DMA_HandleTypeDef hdma_spi3_tx;
 
 TIM_HandleTypeDef htim2;
 
+UART_HandleTypeDef huart2;
 USART_HandleTypeDef husart6;
 DMA_HandleTypeDef hdma_usart6_tx;
 
 /* USER CODE BEGIN PV */
-
+volatile uint8_t effect_mode_spi = 0;
+volatile uint8_t effect_mode_uart = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,6 +68,7 @@ static void MX_SPI3_Init(void);
 static void MX_USART6_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -108,43 +112,36 @@ int main(void)
   MX_USART6_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   led_init();
 
   // Bắt đầu Timer 2 (để tạo nhịp)
   HAL_TIM_Base_Start(&htim2);
   audio_init();
-
+  bluetooth_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  // Biến dùng để đếm thời gian tự chuyển hiệu ứng
   while (1)
   {
-	  // --- TRƯỜNG HỢP 1: CHẾ ĐỘ CHỜ (RESET / BREATHING) ---
-	  if (effect_mode == 0)
-	     {
-	          effect_breathing_continuous();
-	     }
+	  // 1. Quét nút bấm vật lý
+		button_scan();
 
-	     // --- TRƯỜNG HỢP 2: CÁC CHẾ ĐỘ NHẠY NHẠC (MODE 1 -> 7) ---
-	     else
-	     {
-	          // Kiểm tra xem đã thu đủ mẫu âm thanh từ Mic chưa?
-	          if (fft_process_flag == 1)
-	          {
-	              // 1. Xử lý FFT: Tính toán ra Volume và Hertz
-	              // (Hàm này sẽ tự động reset cờ fft_process_flag về 0 sau khi chạy xong)
-	              process_audio_data();
+		// 2. Quét tín hiệu Bluetooth (VẪN CẦN CÁI NÀY)
+		bluetooth_check_connection();
 
-	              // 2. Đẩy dữ liệu sang bộ xử lý LED
-	              // (Lấy kết quả từ biến toàn cục audio_peak_val đập vào effect)
-	              led_effects_manager(audio_peak_val, audio_peak_hz);
-	          }
-	     }
+		// Nếu Bluetooth yêu cầu Reset
+		if (bt_reset_flag == 1) {
+		bt_reset_flag = 0;      // Xóa cờ để không lặp lại
+		perform_system_reset(); // Gọi lại hàm chung y hệt nút bấm
+		}
 
-	   // 4. Nghỉ cực ngắn để giảm tải CPU (giúp DMA chạy ổn định hơn)
-	   HAL_Delay(1);
+		// 3. Xử lý âm thanh
+		process_audio_data();
+		HAL_Delay(1);
   }
     /* USER CODE END WHILE */
 
@@ -335,6 +332,39 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 9600;
+  huart2.Init.WordLength = UART_WORDLENGTH_9B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief USART6 Initialization Function
   * @param None
   * @retval None
@@ -351,7 +381,7 @@ static void MX_USART6_Init(void)
   /* USER CODE END USART6_Init 1 */
   husart6.Instance = USART6;
   husart6.Init.BaudRate = 2625000;
-  husart6.Init.WordLength = USART_WORDLENGTH_8B;
+  husart6.Init.WordLength = USART_WORDLENGTH_9B;
   husart6.Init.StopBits = USART_STOPBITS_1;
   husart6.Init.Parity = USART_PARITY_NONE;
   husart6.Init.Mode = USART_MODE_TX;
@@ -398,6 +428,7 @@ static void MX_DMA_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -406,6 +437,35 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(BT_LED_GPIO_Port, BT_LED_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : BT_LED_Pin */
+  GPIO_InitStruct.Pin = BT_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(BT_LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BT_STATE_Pin */
+  GPIO_InitStruct.Pin = BT_STATE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(BT_STATE_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BTN_RESET_Pin */
+  GPIO_InitStruct.Pin = BTN_RESET_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(BTN_RESET_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : BTN_SPI_Pin BTN_USART_Pin */
+  GPIO_InitStruct.Pin = BTN_SPI_Pin|BTN_USART_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
