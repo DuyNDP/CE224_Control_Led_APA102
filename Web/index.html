@@ -6,263 +6,93 @@
     <title>STM32 LED COMMANDER</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* --- 1. CORE COLOR PALETTE --- */
         :root {
-            --bg-gradient-start: #0f172a; /* Deep Navy */
-            --bg-gradient-end: #1e1b4b;   /* Dark Indigo */
-            
-            /* SPI Colors (Cyan/Teal) */
-            --spi-color: #22d3ee; 
-            --spi-glow: rgba(34, 211, 238, 0.3);
-
-            /* UART Colors (Fuschia/Pink) */
-            --uart-color: #e879f9;
-            --uart-glow: rgba(232, 121, 249, 0.3);
-
-            --glass-bg: rgba(30, 41, 59, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --text-main: #cbd5e1; /* Soft White */
+            --bg-gradient-start: #0f172a; --bg-gradient-end: #1e1b4b;
+            --spi-color: #22d3ee; --spi-glow: rgba(34, 211, 238, 0.3);
+            --uart-color: #e879f9; --uart-glow: rgba(232, 121, 249, 0.3);
+            --glass-bg: rgba(30, 41, 59, 0.7); --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #cbd5e1;
         }
-
         body {
-            font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
-            color: var(--text-main);
-            margin: 0;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            
-            /* --- 2. DEEP SPACE BACKGROUND --- */
-            background-color: var(--bg-gradient-start);
-            background-image: 
-                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-                radial-gradient(circle at 50% 0%, #1e1b4b 0%, #000000 100%);
-            background-size: 40px 40px, 40px 40px, 100% 100%;
-            background-attachment: fixed;
+            font-family: 'Segoe UI', sans-serif; color: var(--text-main); margin: 0; min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+            background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #000000 100%);
+            background-color: var(--bg-gradient-start); background-attachment: fixed;
         }
-
-        h1 {
-            margin-top: 30px;
-            font-weight: 300;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            font-size: 1.5rem;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            border-bottom: 1px solid var(--glass-border);
-            padding-bottom: 10px;
-        }
-
-        /* --- STATUS BAR (Glass) --- */
+        h1 { margin-top: 30px; letter-spacing: 4px; border-bottom: 1px solid var(--glass-border); padding-bottom: 10px; }
+        
         .status-bar {
-            width: 90%;
-            max-width: 800px;
-            background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--glass-border);
-            padding: 10px 20px;
-            border-radius: 50px;
-            margin: 20px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 90%; max-width: 800px; background: var(--glass-bg); backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border); padding: 15px 20px; border-radius: 20px;
+            margin: 15px 0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-
-        .status-dot {
-            height: 8px; width: 8px;
-            background-color: #ef4444; /* Red - Offline */
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            box-shadow: 0 0 5px #ef4444;
-        }
-        .connected .status-dot {
-            background-color: #10b981; /* Green - Online */
-            box-shadow: 0 0 8px #10b981;
-        }
-
-        button#btn-connect {
-            background: rgba(255,255,255,0.05);
-            color: var(--text-main);
-            border: 1px solid var(--glass-border);
-            padding: 8px 20px;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: 0.3s;
-            font-size: 0.9rem;
-        }
-        button#btn-connect:hover { background: rgba(255,255,255,0.15); }
-
-        /* --- PANEL LAYOUT --- */
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            width: 95%;
-            max-width: 900px;
-            padding-bottom: 50px;
-        }
-
-        .panel {
-            flex: 1;
-            min-width: 320px;
-            background: var(--glass-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-        }
-
-        .panel-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
-        .panel-header i { margin-right: 10px; font-size: 1.2rem; }
+        .status-dot { height: 8px; width: 8px; background-color: #ef4444; border-radius: 50%; display: inline-block; margin-right: 8px; box-shadow: 0 0 5px #ef4444; }
+        .connected .status-dot { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+        button#btn-connect { background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--glass-border); padding: 8px 20px; border-radius: 20px; cursor: pointer; transition: 0.3s; }
         
-        /* Panel Specific Colors */
-        .spi-panel .panel-header { color: var(--spi-color); }
-        .uart-panel .panel-header { color: var(--uart-color); }
-
-        /* --- BUTTONS --- */
-        .grid-btns {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
-
-        .ef-btn {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid var(--glass-border);
-            color: #94a3b8; /* Muted text */
-            padding: 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            transition: all 0.3s ease;
-            text-align: left;
-        }
-        
-        .ef-btn i { width: 25px; font-size: 1.1rem; text-align: center; margin-right: 8px; }
-        .ef-btn span { font-size: 0.9rem; }
-
-        /* Hover Effect */
-        .ef-btn:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            transform: translateY(-2px);
-        }
-
-        /* --- ACTIVE STATE --- */
-        /* SPI Active */
-        .spi-panel .ef-btn.active {
-            background: rgba(34, 211, 238, 0.15);
-            border-color: var(--spi-color);
-            color: var(--spi-color);
-            box-shadow: 0 0 15px var(--spi-glow);
-        }
-        /* UART Active */
-        .uart-panel .ef-btn.active {
-            background: rgba(232, 121, 249, 0.15);
-            border-color: var(--uart-color);
-            color: var(--uart-color);
-            box-shadow: 0 0 15px var(--uart-glow);
-        }
-
-        /* OFF Button */
+        .container { display: flex; flex-wrap: wrap; gap: 20px; width: 95%; max-width: 900px; padding-bottom: 50px; }
+        .panel { flex: 1; min-width: 320px; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; }
+        .panel-header { display: flex; align-items: center; margin-bottom: 20px; font-weight: 600; font-size: 1.1rem; }
+        .spi-panel .panel-header { color: var(--spi-color); } .uart-panel .panel-header { color: var(--uart-color); }
+        .grid-btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .ef-btn { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--glass-border); color: #94a3b8; padding: 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; transition: 0.3s; }
+        .ef-btn:hover { background: rgba(255, 255, 255, 0.05); color: #fff; transform: translateY(-2px); }
+        .ef-btn i { width: 25px; margin-right: 8px; text-align: center; }
+        .spi-panel .ef-btn.active { background: rgba(34, 211, 238, 0.15); border-color: var(--spi-color); color: var(--spi-color); box-shadow: 0 0 15px var(--spi-glow); }
+        .uart-panel .ef-btn.active { background: rgba(232, 121, 249, 0.15); border-color: var(--uart-color); color: var(--uart-color); box-shadow: 0 0 15px var(--uart-glow); }
         .btn-off { grid-column: span 2; justify-content: center; }
-        .btn-off:hover { color: #f87171; border-color: #f87171; }
-        
-        /* RESET Button */
-        .btn-reset-main {
-            width: 95%; max-width: 900px;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.3s;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-        .btn-reset-main:hover {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fff;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
-        }
-
+        .btn-reset-main { width: 95%; max-width: 900px; margin-bottom: 10px; padding: 15px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; border-radius: 12px; cursor: pointer; font-weight: bold; letter-spacing: 2px; }
     </style>
 </head>
 <body>
-
     <h1>STM32 CONTROL HUB</h1>
 
     <div class="status-bar">
         <div id="status-text"><span class="status-dot"></span>Disconnected</div>
-        <button id="btn-connect" onclick="connectSerial()"><i class="fa-brands fa-bluetooth-b"></i> Connect Device</button>
+        <button id="btn-connect" onclick="connectSerial()"><i class="fa-brands fa-bluetooth-b"></i> Connect</button>
     </div>
 
-    <button class="btn-reset-main" onclick="sendCommand('r')">
-        <i class="fa-solid fa-power-off"></i> SYSTEM REBOOT
-    </button>
+    <button class="btn-reset-main" onclick="systemReboot()"><i class="fa-solid fa-power-off"></i> SYSTEM REBOOT</button>
 
     <div class="container">
-        
         <div class="panel spi-panel">
-            <div class="panel-header">
-                <i class="fa-solid fa-microchip"></i>
-                <span>SPI LED CONTROL</span>
-            </div>
+            <div class="panel-header"><i class="fa-solid fa-microchip"></i> <span>SPI LED</span></div>
             <div class="grid-btns">
                 <button class="ef-btn" onclick="sendSPI('0', this)"><i class="fa-solid fa-lungs"></i><span>Breathing</span></button>
                 <button class="ef-btn" onclick="sendSPI('1', this)"><i class="fa-solid fa-chart-bar"></i><span>VU Smart</span></button>
                 <button class="ef-btn" onclick="sendSPI('2', this)"><i class="fa-solid fa-wave-square"></i><span>Freq Color</span></button>
                 <button class="ef-btn" onclick="sendSPI('3', this)"><i class="fa-solid fa-rainbow"></i><span>Rainbow</span></button>
                 <button class="ef-btn" onclick="sendSPI('4', this)"><i class="fa-solid fa-cloud-rain"></i><span>Music Rain</span></button>
+                
                 <button class="ef-btn" onclick="sendSPI('5', this)"><i class="fa-solid fa-fire"></i><span>Fire</span></button>
                 <button class="ef-btn" onclick="sendSPI('6', this)"><i class="fa-solid fa-bullseye"></i><span>Center Pulse</span></button>
-                <button class="ef-btn" onclick="sendSPI('7', this)"><i class="fa-solid fa-clone"></i><span>Mirror VU</span></button>
-                <button class="ef-btn" onclick="sendSPI('8', this)"><i class="fa-regular fa-snowflake"></i><span>Fire Ice</span></button>
+
                 <button class="ef-btn btn-off" onclick="sendSPI('x', this)"><i class="fa-solid fa-eye-slash"></i><span>TURN OFF</span></button>
             </div>
         </div>
 
         <div class="panel uart-panel">
-            <div class="panel-header">
-                <i class="fa-solid fa-bolt"></i>
-                <span>UART LED CONTROL</span>
-            </div>
+            <div class="panel-header"><i class="fa-solid fa-bolt"></i> <span>UART LED</span></div>
             <div class="grid-btns">
                 <button class="ef-btn" onclick="sendUART('a', this)"><i class="fa-solid fa-lungs"></i><span>Breathing</span></button>
                 <button class="ef-btn" onclick="sendUART('b', this)"><i class="fa-solid fa-chart-bar"></i><span>VU Smart</span></button>
                 <button class="ef-btn" onclick="sendUART('c', this)"><i class="fa-solid fa-wave-square"></i><span>Freq Color</span></button>
                 <button class="ef-btn" onclick="sendUART('d', this)"><i class="fa-solid fa-rainbow"></i><span>Rainbow</span></button>
                 <button class="ef-btn" onclick="sendUART('e', this)"><i class="fa-solid fa-cloud-rain"></i><span>Music Rain</span></button>
-                <button class="ef-btn" onclick="sendUART('f', this)"><i class="fa-solid fa-fire"></i><span>Fire</span></button>
+
+                <button class="ef-btn" onclick="sendUART('f', this)"><i class="fa-solid fa-snowflake"></i><span>Ice</span></button>
                 <button class="ef-btn" onclick="sendUART('g', this)"><i class="fa-solid fa-bullseye"></i><span>Center Pulse</span></button>
-                <button class="ef-btn" onclick="sendUART('h', this)"><i class="fa-solid fa-clone"></i><span>Mirror VU</span></button>
-                <button class="ef-btn" onclick="sendUART('i', this)"><i class="fa-regular fa-snowflake"></i><span>Fire Ice</span></button>
+
                 <button class="ef-btn btn-off" onclick="sendUART('y', this)"><i class="fa-solid fa-eye-slash"></i><span>TURN OFF</span></button>
             </div>
         </div>
-
     </div>
-
+    
     <script>
-        let port;
-        let writer;
+        // ... (Giữ nguyên phần script cũ) ...
+        // Chỉ cần chép lại phần script từ câu trả lời trước
+        let port, writer, reader, keepReading = false;
 
-        // --- CONNECT FUNCTION ---
         async function connectSerial() {
             if ("serial" in navigator) {
                 try {
@@ -273,52 +103,55 @@
                     textEncoder.readable.pipeTo(port.writable);
                     writer = textEncoder.writable.getWriter();
 
+                    const textDecoder = new TextDecoderStream();
+                    port.readable.pipeTo(textDecoder.writable);
+                    reader = textDecoder.readable.getReader();
+
                     document.querySelector('.status-bar').classList.add('connected');
                     document.getElementById('status-text').innerHTML = '<span class="status-dot"></span>System Online';
                     document.getElementById('btn-connect').style.display = 'none';
-                } catch (err) {
-                    alert("Connection failed or cancelled.");
-                }
-            } else {
-                alert("Browser not supported. Please use Chrome/Edge on PC or Android.");
+
+                    keepReading = true; readLoop();
+                } catch (err) { console.error(err); alert("Failed to connect."); }
+            } else { alert("Browser not supported."); }
+        }
+
+        async function readLoop() {
+            while (port.readable && keepReading) {
+                try {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        for (let char of value) {
+                            handleIncomingChar(char);
+                        }
+                    }
+                } catch (e) { break; }
             }
         }
 
-        // --- SEND COMMAND ---
+        function handleIncomingChar(char) {
+            if (char === 'r') { systemRebootUI(); return; }
+            let btn = document.querySelector(`.spi-panel button[onclick*="'${char}'"]`) || 
+                      document.querySelector(`.uart-panel button[onclick*="'${char}'"]`);
+            if (btn) {
+                let panelClass = btn.closest('.panel').classList.contains('spi-panel') ? '.spi-panel' : '.uart-panel';
+                highlightBtn(btn, panelClass);
+            }
+        }
+
         async function sendCommand(char) {
-            if (!writer) return alert("Please connect device first!");
-            try {
-                await writer.write(char);
-                console.log("Sent:", char);
-            } catch (e) {
-                console.error(e);
-                alert("Connection lost!");
-            }
+            if (!writer) return;
+            try { await writer.write(char); } catch (e) { console.error(e); }
         }
 
-        // --- SPI HANDLER ---
-        function sendSPI(char, btn) {
-            sendCommand(char);
-            highlightBtn(btn, '.spi-panel');
-        }
-
-        // --- UART HANDLER ---
-        function sendUART(char, btn) {
-            sendCommand(char);
-            highlightBtn(btn, '.uart-panel');
-        }
-
-        // --- UI HIGHLIGHT ---
-        function highlightBtn(btn, panelClass) {
-            // Remove active class from previous button in the same panel
-            let panel = document.querySelector(panelClass);
-            let btns = panel.querySelectorAll('.ef-btn');
-            btns.forEach(b => b.classList.remove('active'));
-            
-            // Only highlight if it's not the OFF button
-            if (btn.innerText !== 'TURN OFF') {
-                btn.classList.add('active');
-            }
+        function systemReboot() { sendCommand('r'); systemRebootUI(); }
+        function systemRebootUI() { document.querySelectorAll('.ef-btn.active').forEach(b => b.classList.remove('active')); }
+        function sendSPI(c, b) { sendCommand(c); highlightBtn(b, '.spi-panel'); }
+        function sendUART(c, b) { sendCommand(c); highlightBtn(b, '.uart-panel'); }
+        function highlightBtn(btn, pClass) {
+            document.querySelector(pClass).querySelectorAll('.ef-btn').forEach(b => b.classList.remove('active'));
+            if (btn.innerText !== 'TURN OFF') btn.classList.add('active');
         }
     </script>
 </body>
