@@ -25,6 +25,8 @@
 #include "effect.h"
 #include "button.h"
 #include "bluetooth.h"
+#include "knob.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,20 +46,24 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc2;
 DMA_HandleTypeDef hdma_adc1;
+DMA_HandleTypeDef hdma_adc2;
 
 SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef hdma_spi3_tx;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
 USART_HandleTypeDef husart6;
 DMA_HandleTypeDef hdma_usart6_tx;
 
 /* USER CODE BEGIN PV */
-volatile uint8_t effect_mode_spi = 0;
-volatile uint8_t effect_mode_uart = 0;
+extern volatile uint8_t effect_mode_spi;
+extern volatile uint8_t effect_mode_uart;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +75,8 @@ static void MX_USART6_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_ADC2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -113,6 +121,8 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
+  MX_ADC2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   led_init();
 
@@ -120,6 +130,39 @@ int main(void)
   HAL_TIM_Base_Start(&htim2);
   audio_init();
   bluetooth_init();
+
+  knob_init();
+
+  HAL_Delay(1000);
+
+    // 2. Đọc trạng thái thực tế của nút và GÁN THẲNG vào trạng thái cũ
+    // Việc này "đánh lừa" hàm button_scan rằng nút đã ở trạng thái này từ trước
+    // Cần include "button.h" và truy cập vào struct btn_spi, btn_uart
+
+    // Nút SPI
+    if (HAL_GPIO_ReadPin(BTN_SPI_PORT, BTN_SPI_PIN) == GPIO_PIN_SET) {
+        btn_spi.last_state = 1; // Nếu đang bị giữ hoặc nhiễu mức 1, coi như đã biết
+        btn_spi.is_pressed = 1; // Đánh dấu là đang nhấn để không trigger event
+    } else {
+        btn_spi.last_state = 0;
+        btn_spi.is_pressed = 0;
+    }
+
+    // Nút UART
+    if (HAL_GPIO_ReadPin(BTN_UART_PORT, BTN_UART_PIN) == GPIO_PIN_SET) {
+        btn_uart.last_state = 1;
+        btn_uart.is_pressed = 1;
+    } else {
+        btn_uart.last_state = 0;
+        btn_uart.is_pressed = 0;
+    }
+
+    // 3. Reset cứng biến Mode về 0 lần cuối cùng
+    effect_mode_spi = 0;
+    effect_mode_uart = 0;
+
+    check_system_reset_cause();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,21 +170,25 @@ int main(void)
   // Biến dùng để đếm thời gian tự chuyển hiệu ứng
   while (1)
   {
-	  // 1. Quét nút bấm vật lý
-		button_scan();
+	  brightness_update();
+	  bluetooth_check_connection();
+	  process_audio_data();
+	  button_scan();
+	  // Gọi hàm LED mới với 2 biến kết quả từ FFT
+	  // audio_peak_val: Cường độ
+	  // audio_peak_hz:  Tần số
 
-		// 2. Quét tín hiệu Bluetooth (VẪN CẦN CÁI NÀY)
-		bluetooth_check_connection();
+	  // effect
+	  //led_run_single_effect(audio_peak_val, audio_peak_hz);
+	  //led_run_test_freq_color(audio_peak_val, audio_peak_hz);
+	  //led_run_test_rainbow(audio_peak_val);
+	  //effect_music_rain(audio_peak_val, audio_peak_hz);
+	  //effect_falling_rain(audio_peak_val, audio_peak_hz, 40);
+	  // effect_fire(smoothed_val);
+	  //effect_center_pulse(smoothed_val, hz);
 
-		// Nếu Bluetooth yêu cầu Reset
-		if (bt_reset_flag == 1) {
-		bt_reset_flag = 0;      // Xóa cờ để không lặp lại
-		perform_system_reset(); // Gọi lại hàm chung y hệt nút bấm
-		}
-
-		// 3. Xử lý âm thanh
-		process_audio_data();
-		HAL_Delay(1);
+	   // 4. Nghỉ cực ngắn để giảm tải CPU (giúp DMA chạy ổn định hơn)
+	   HAL_Delay(1);
   }
     /* USER CODE END WHILE */
 
@@ -237,7 +284,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -245,6 +292,58 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.ScanConvMode = DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.NbrOfConversion = 1;
+  hadc2.Init.DMAContinuousRequests = ENABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -332,6 +431,51 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 4199;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 499;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -348,7 +492,7 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
   huart2.Init.BaudRate = 9600;
-  huart2.Init.WordLength = UART_WORDLENGTH_9B;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
   huart2.Init.Mode = UART_MODE_TX_RX;
@@ -415,6 +559,9 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
   /* DMA2_Stream6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream6_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream6_IRQn);

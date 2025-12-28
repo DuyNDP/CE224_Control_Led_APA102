@@ -1,6 +1,6 @@
 /*
  * bluetooth.h
- * Status: SYNCHRONIZED with Button & Web
+ * Cập nhật: Thêm tính năng báo đèn trạng thái kết nối
  */
 
 #ifndef INC_BLUETOOTH_H_
@@ -8,11 +8,12 @@
 
 #include "main.h"
 #include "effect.h"
-#include "button.h" // Import để lấy số lượng MAX_EFFECT
 
-extern UART_HandleTypeDef huart2; // Đảm bảo đúng UART nối với HC05
+extern UART_HandleTypeDef huart2;
 
-// --- CẤU HÌNH CHÂN ---
+// --- ĐỊNH NGHĨA CHÂN (Phải khớp với CubeMX) ---
+// Nếu bạn đặt User Label trong CubeMX là BT_STATE và LED_D2 thì main.h đã tự có
+// Nếu chưa, hãy định nghĩa thủ công ở đây:
 #ifndef BT_STATE_PIN
 #define BT_STATE_PIN  GPIO_PIN_4
 #define BT_STATE_PORT GPIOC
@@ -23,65 +24,46 @@ extern UART_HandleTypeDef huart2; // Đảm bảo đúng UART nối với HC05
 #define LED_D2_PORT   GPIOA
 #endif
 
-// Biến nhận dữ liệu
-volatile uint8_t bt_rx_data;
-
-// Cờ báo hiệu Reset (để xử lý trong main tránh treo ngắt)
-volatile uint8_t bt_reset_flag = 0;
+volatile char bt_rx_data;
 
 void bluetooth_init(void) {
-    // Nhận 1 byte ngắt
     HAL_UART_Receive_IT(&huart2, (uint8_t*)&bt_rx_data, 1);
 }
 
-// --- KIỂM TRA KẾT NỐI ---
+// --- HÀM KIỂM TRA KẾT NỐI (Gọi liên tục trong while(1)) ---
 void bluetooth_check_connection(void) {
+    // Đọc trạng thái chân STATE của HC-05
     if (HAL_GPIO_ReadPin(BT_STATE_PORT, BT_STATE_PIN) == GPIO_PIN_SET) {
-        HAL_GPIO_WritePin(LED_D2_PORT, LED_D2_PIN, GPIO_PIN_RESET); // Đèn sáng (Active Low)
-    } else {
-        HAL_GPIO_WritePin(LED_D2_PORT, LED_D2_PIN, GPIO_PIN_SET);   // Đèn tắt
+        // HC-05 báo mức 1 -> ĐÃ KẾT NỐI
+
+        // Bật đèn D2 (Lưu ý: Board STM32 thường là Active LOW, tức ghi 0 là sáng)
+        // Nếu board bạn ghi 1 là sáng thì đổi thành GPIO_PIN_SET
+        HAL_GPIO_WritePin(LED_D2_PORT, LED_D2_PIN, GPIO_PIN_RESET);
+    }
+    else {
+        // HC-05 báo mức 0 -> MẤT KẾT NỐI
+
+        // Tắt đèn D2
+        HAL_GPIO_WritePin(LED_D2_PORT, LED_D2_PIN, GPIO_PIN_SET);
     }
 }
 
-// --- CALLBACK XỬ LÝ LỆNH TỪ WEB ---
+// --- Callback nhận dữ liệu (Giữ nguyên) ---
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2) {
+        // Chỉ xử lý các ký tự đơn
+        if (bt_rx_data >= '0' && bt_rx_data <= '6') effect_mode_spi = bt_rx_data - '0';
+        else if (bt_rx_data == 'x') effect_mode_spi = 99; // Tắt SPI
 
-        // ================= XỬ LÝ CHO DÂY SPI (Dùng SỐ 0-8) =================
-        if (bt_rx_data >= '0' && bt_rx_data <= '8') {
-            effect_mode_spi = bt_rx_data - '0';
-        }
-        else if (bt_rx_data == 'x') { // Tắt SPI
-            effect_mode_spi = 99;
-        }
+        else if (bt_rx_data >= 'a' && bt_rx_data <= 'i') effect_mode_uart = bt_rx_data - 'a';
+        else if (bt_rx_data == 'y') effect_mode_uart = 99; // Tắt UART
 
-        // ================= XỬ LÝ CHO DÂY UART (Dùng CHỮ a-i) =================
-        // Map: 'a'=0, 'b'=1, 'c'=2 ...
-        else if (bt_rx_data >= 'a' && bt_rx_data <= 'i') {
-            uint8_t mode = bt_rx_data - 'a'; // 'a' (97) - 'a' (97) = 0
-            effect_mode_uart = mode;
+        else if (bt_rx_data == 'r') NVIC_SystemReset(); // Reset mềm
 
-            // Kiểm tra giới hạn mode của UART
-            if (effect_mode_uart > MAX_EFFECT_UART) {
-                // Nếu dây UART không hỗ trợ mode này (ví dụ Mirror 7, Ice 8), có thể map về mode khác
-                // Hoặc giữ nguyên nếu bạn đã code support.
-                // Ví dụ: effect_mode_uart = 0;
-            }
-        }
-        else if (bt_rx_data == 'y') { // Tắt UART
-            effect_mode_uart = 99;
-        }
-
-        // ================= HỆ THỐNG =================
-        else if (bt_rx_data == 'r') {
-             // Reset toàn bộ
-             bt_reset_flag = 1;
-        }
-
-        // Tiếp tục nhận dữ liệu ngắt
         HAL_UART_Receive_IT(&huart2, (uint8_t*)&bt_rx_data, 1);
     }
 }
+
 
 #endif /* INC_BLUETOOTH_H_ */
