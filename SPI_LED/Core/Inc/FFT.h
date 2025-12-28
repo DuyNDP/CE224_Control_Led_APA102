@@ -33,6 +33,10 @@ int32_t debug_peak_hz = 0;
 float audio_peak_val = 0.0f; // Cường độ âm thanh lớn nhất hiện tại (Volume)
 float audio_peak_hz  = 0.0f; // Tần số của âm thanh đó (Pitch/Tone)
 
+void audio_init(void);
+void process_audio_data(void);
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
+
 void audio_init(void) {
     arm_rfft_fast_init_f32(&fft_handler, FFT_SAMPLES);
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, FFT_SAMPLES);

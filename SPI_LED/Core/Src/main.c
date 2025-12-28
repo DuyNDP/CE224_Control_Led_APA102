@@ -23,7 +23,6 @@
 /* USER CODE BEGIN Includes */
 #include "FFT.h"
 #include "effect.h"
-#include "usart_effect.h"
 #include "button.h"
 #include "bluetooth.h"
 #include "knob.h"
@@ -62,6 +61,8 @@ USART_HandleTypeDef husart6;
 DMA_HandleTypeDef hdma_usart6_tx;
 
 /* USER CODE BEGIN PV */
+extern volatile uint8_t effect_mode_spi;
+extern volatile uint8_t effect_mode_uart;
 
 /* USER CODE END PV */
 
@@ -129,8 +130,37 @@ int main(void)
   HAL_TIM_Base_Start(&htim2);
   audio_init();
   bluetooth_init();
-
   knob_init();
+
+  HAL_Delay(1000);
+
+    // 2. Đọc trạng thái thực tế của nút và GÁN THẲNG vào trạng thái cũ
+    // Việc này "đánh lừa" hàm button_scan rằng nút đã ở trạng thái này từ trước
+    // Cần include "button.h" và truy cập vào struct btn_spi, btn_uart
+
+    // Nút SPI
+    if (HAL_GPIO_ReadPin(BTN_SPI_PORT, BTN_SPI_PIN) == GPIO_PIN_SET) {
+        btn_spi.last_state = 1; // Nếu đang bị giữ hoặc nhiễu mức 1, coi như đã biết
+        btn_spi.is_pressed = 1; // Đánh dấu là đang nhấn để không trigger event
+    } else {
+        btn_spi.last_state = 0;
+        btn_spi.is_pressed = 0;
+    }
+
+    // Nút UART
+    if (HAL_GPIO_ReadPin(BTN_UART_PORT, BTN_UART_PIN) == GPIO_PIN_SET) {
+        btn_uart.last_state = 1;
+        btn_uart.is_pressed = 1;
+    } else {
+        btn_uart.last_state = 0;
+        btn_uart.is_pressed = 0;
+    }
+
+    // 3. Reset cứng biến Mode về 0 lần cuối cùng
+    effect_mode_spi = 0;
+    effect_mode_uart = 0;
+
+    check_system_reset_cause();
 
   /* USER CODE END 2 */
 
@@ -143,21 +173,7 @@ int main(void)
 	  bluetooth_check_connection();
 	  process_audio_data();
 	  button_scan();
-	  // Gọi hàm LED mới với 2 biến kết quả từ FFT
-	  // audio_peak_val: Cường độ
-	  // audio_peak_hz:  Tần số
-
-	  // effect
-	  //led_run_single_effect(audio_peak_val, audio_peak_hz);
-	  //led_run_test_freq_color(audio_peak_val, audio_peak_hz);
-	  //led_run_test_rainbow(audio_peak_val);
-	  //effect_music_rain(audio_peak_val, audio_peak_hz);
-	  //effect_falling_rain(audio_peak_val, audio_peak_hz, 40);
-	  // effect_fire(smoothed_val);
-	  //effect_center_pulse(smoothed_val, hz);
-
-	   // 4. Nghỉ cực ngắn để giảm tải CPU (giúp DMA chạy ổn định hơn)
-	   HAL_Delay(1);
+	  HAL_Delay(1);
   }
     /* USER CODE END WHILE */
 

@@ -25,7 +25,10 @@ extern UART_HandleTypeDef huart2;
 #endif
 
 volatile char bt_rx_data;
-volatile char min = 'C';
+
+void bluetooth_init(void);
+void bluetooth_check_connection(void);
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 
 void bluetooth_init(void) {
     HAL_UART_Receive_IT(&huart2, (uint8_t*)&bt_rx_data, 1);
@@ -52,29 +55,19 @@ void bluetooth_check_connection(void) {
 // --- Callback nhận dữ liệu (Giữ nguyên) ---
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-
-
-	        // CHỈ CẬP NHẬT NẾU DỮ LIỆU KHÁC 0
-	        if (bt_rx_data > 0 && bt_rx_data < min) {
-	            min = bt_rx_data;
-	        }
-
     if (huart->Instance == USART2) {
-        switch (bt_rx_data) {
-            case '1':
-                effect_mode_spi++;
-                if (effect_mode_spi >= 5) effect_mode_spi = 0;
-                break;
-            case '2':
-                effect_mode_uart++;
-                if (effect_mode_uart >= 5) effect_mode_uart = 0;
-                break;
-            case 'r':
-            case 'R':
-                break;
-        }
+        // Chỉ xử lý các ký tự đơn
+        if (bt_rx_data >= '0' && bt_rx_data <= '6') effect_mode_spi = bt_rx_data - '0';
+        else if (bt_rx_data == 'x') effect_mode_spi = 99; // Tắt SPI
+
+        else if (bt_rx_data >= 'a' && bt_rx_data <= 'i') effect_mode_uart = bt_rx_data - 'a';
+        else if (bt_rx_data == 'y') effect_mode_uart = 99; // Tắt UART
+
+        else if (bt_rx_data == 'r') NVIC_SystemReset(); // Reset mềm
+
         HAL_UART_Receive_IT(&huart2, (uint8_t*)&bt_rx_data, 1);
     }
 }
+
 
 #endif /* INC_BLUETOOTH_H_ */

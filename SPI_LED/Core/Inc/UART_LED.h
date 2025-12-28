@@ -15,6 +15,10 @@ extern USART_HandleTypeDef husart6;
 
 uint8_t usart_led_buffer[BUFFER_SIZE];
 
+void usart_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness);
+void usart_update(void);
+void usart_init_buffer(void);
+
 void usart_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness)
 {
     if (index >= NUM_LEDS) {
