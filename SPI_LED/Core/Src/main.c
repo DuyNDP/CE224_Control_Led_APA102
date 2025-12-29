@@ -584,12 +584,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(BT_STATE_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BTN_RESET_Pin */
-  GPIO_InitStruct.Pin = BTN_RESET_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(BTN_RESET_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pins : BTN_SPI_Pin BTN_USART_Pin */
   GPIO_InitStruct.Pin = BTN_SPI_Pin|BTN_USART_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
