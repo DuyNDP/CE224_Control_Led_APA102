@@ -11,9 +11,9 @@
 #include "main.h"
 #include "Config.h"
 #include "arm_math.h"
-#include "effect.h"
 
 extern ADC_HandleTypeDef hadc1;
+extern TIM_HandleTypeDef htim2;
 
 // --- Biến cho xử lý âm thanh ---
 uint16_t adc_buffer[FFT_SAMPLES];       // Buffer chứa dữ liệu thô từ Mic (DMA nạp vào đây)
@@ -33,7 +33,13 @@ int32_t debug_peak_hz = 0;
 float audio_peak_val = 0.0f; // Cường độ âm thanh lớn nhất hiện tại (Volume)
 float audio_peak_hz  = 0.0f; // Tần số của âm thanh đó (Pitch/Tone)
 
+void audio_init(void);
+void process_audio_data(void);
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
+
 void audio_init(void) {
+	// Bắt đầu Timer 2 (để tạo nhịp)
+	HAL_TIM_Base_Start(&htim2);
     arm_rfft_fast_init_f32(&fft_handler, FFT_SAMPLES);
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, FFT_SAMPLES);
 }
@@ -56,11 +62,10 @@ void process_audio_data(void) {
         arm_rfft_fast_f32(&fft_handler, fft_in_buf, fft_out_buf, 0);
 
         // 3. Tính độ lớn (Magnitude)
-        // Hàm này thay thế cho đoạn code: mag = sqrt(re*re + im*im)
-        // Kết quả lưu vào fft_mag_buf. Chỉ có FFT_SAMPLES/2 phần tử hợp lệ.
+
         arm_cmplx_mag_f32(fft_out_buf, fft_mag_buf, FFT_SAMPLES / 2);
 
-        // 4. PHÂN TÍCH TÌM PEAK (Giống cấu trúc bạn yêu cầu)
+        // 4. PHÂN TÍCH TÌM PEAK
         // Tìm xem tần số nào đang chiếm ưu thế nhất (To nhất)
         float max_mag = 0.0f;
         uint16_t max_index = 0;
@@ -85,16 +90,13 @@ void process_audio_data(void) {
 
         // Xử lý Tần số (HZ): Tính theo công thức chuẩn và cắt trần
         float final_hz = (float)max_index * (SAMPLING_RATE / (float)FFT_SAMPLES);
-        if (final_hz > TARGET_MAX_HZ) final_hz = TARGET_MAX_HZ; // Cắt nếu vượt 100k
+        if (final_hz > TARGET_MAX_HZ) final_hz = TARGET_MAX_HZ;
         audio_peak_val = final_val;
         audio_peak_hz  = final_hz;
 
         // Ép kiểu sang số nguyên để SWV vẽ cho đẹp
         debug_peak_val = (int32_t)audio_peak_val;
         debug_peak_hz  = (int32_t)audio_peak_hz;
-
-        // Gọi hàm chạy hiệu ứng
-        led_effects_manager(audio_peak_val, audio_peak_hz);
 
         // 6. Reset cờ
         fft_process_flag = 0;

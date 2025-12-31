@@ -7,6 +7,9 @@ extern TIM_HandleTypeDef htim3;
 volatile uint32_t brightness = 0;
 volatile uint32_t adc_val[1];
 
+void knob_init(void);
+void brightness_update(void);
+
 void knob_init(void) {
 	HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_val, 1);
 	HAL_TIM_Base_Start(&htim3);

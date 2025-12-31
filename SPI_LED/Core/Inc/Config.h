@@ -9,7 +9,7 @@
 #define INC_CONFIG_H_
 
 #define NUM_LEDS 30           // How many LEDs are in your strip
-#define MAX_BRIGHTNESS 15		// brightness 5 bit
+#define MAX_BRIGHTNESS 31	  // brightness 5 bit
 #define LED_FRAME_SIZE 4      // 4 bytes per LED (B, G, R, Brightness)
 #define START_FRAME_SIZE 4    // 4 bytes for the start frame
 #define END_FRAME_SIZE 4      // 4 bytes for the end frame
@@ -28,6 +28,6 @@
 #define MAG_SCALE_FACTOR 35.0f
 
 // --- CẤU HÌNH LED ---
-#define LED_UPDATE_INTERVAL 10  // Thời gian update LED: 500ms
+#define LED_UPDATE_INTERVAL 10  // Thời gian update LED: 10ms
 
 #endif /* INC_CONFIG_H_ */

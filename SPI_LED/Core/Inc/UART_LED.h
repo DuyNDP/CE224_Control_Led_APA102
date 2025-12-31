@@ -13,7 +13,11 @@
 
 extern USART_HandleTypeDef husart6;
 
-uint8_t usart_led_buffer[BUFFER_SIZE];
+uint8_t usart_led_buffer[BUFFER_SIZE] = {0};
+
+void usart_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness);
+void usart_update(void);
+void usart_init_buffer(void);
 
 void usart_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness)
 {
@@ -23,7 +27,7 @@ void usart_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brig
 
     uint32_t pos = START_FRAME_SIZE + (index * LED_FRAME_SIZE);
 
-    usart_led_buffer[pos + 0] = 0b11100000 | (brightness & 0x1F);
+    usart_led_buffer[pos + 0] = 0xE0 | (brightness & 0x1F);
     usart_led_buffer[pos + 1] = b;
     usart_led_buffer[pos + 2] = g;
     usart_led_buffer[pos + 3] = r;

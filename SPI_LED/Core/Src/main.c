@@ -21,12 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "FFT.h"
 #include "effect.h"
-#include "usart_effect.h"
-#include "button.h"
 #include "bluetooth.h"
-#include "knob.h"
 
 /* USER CODE END Includes */
 
@@ -62,6 +58,8 @@ USART_HandleTypeDef husart6;
 DMA_HandleTypeDef hdma_usart6_tx;
 
 /* USER CODE BEGIN PV */
+extern volatile uint8_t effect_mode_spi;
+extern volatile uint8_t effect_mode_uart;
 
 /* USER CODE END PV */
 
@@ -124,40 +122,19 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   led_init();
-
-  // Bắt đầu Timer 2 (để tạo nhịp)
-  HAL_TIM_Base_Start(&htim2);
   audio_init();
   bluetooth_init();
-
   knob_init();
-
+  button_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  // Biến dùng để đếm thời gian tự chuyển hiệu ứng
   while (1)
   {
-	  brightness_update();
 	  bluetooth_check_connection();
-	  process_audio_data();
-	  button_scan();
-	  // Gọi hàm LED mới với 2 biến kết quả từ FFT
-	  // audio_peak_val: Cường độ
-	  // audio_peak_hz:  Tần số
-
-	  // effect
-	  //led_run_single_effect(audio_peak_val, audio_peak_hz);
-	  //led_run_test_freq_color(audio_peak_val, audio_peak_hz);
-	  //led_run_test_rainbow(audio_peak_val);
-	  //effect_music_rain(audio_peak_val, audio_peak_hz);
-	  //effect_falling_rain(audio_peak_val, audio_peak_hz, 40);
-	  // effect_fire(smoothed_val);
-	  //effect_center_pulse(smoothed_val, hz);
-
-	   // 4. Nghỉ cực ngắn để giảm tải CPU (giúp DMA chạy ổn định hơn)
-	   HAL_Delay(1);
+      led_effects_manager();
+	  HAL_Delay(1);
   }
     /* USER CODE END WHILE */
 
@@ -339,7 +316,7 @@ static void MX_SPI3_Init(void)
   hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi3.Init.NSS = SPI_NSS_SOFT;
-  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -494,7 +471,7 @@ static void MX_USART6_Init(void)
   /* USER CODE END USART6_Init 1 */
   husart6.Instance = USART6;
   husart6.Init.BaudRate = 2625000;
-  husart6.Init.WordLength = USART_WORDLENGTH_9B;
+  husart6.Init.WordLength = USART_WORDLENGTH_8B;
   husart6.Init.StopBits = USART_STOPBITS_1;
   husart6.Init.Parity = USART_PARITY_NONE;
   husart6.Init.Mode = USART_MODE_TX;
@@ -523,16 +500,16 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
   /* DMA2_Stream2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 3, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
   /* DMA2_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream6_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream6_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream6_IRQn);
 
 }
@@ -570,12 +547,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(BT_STATE_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : BTN_RESET_Pin */
-  GPIO_InitStruct.Pin = BTN_RESET_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(BTN_RESET_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : BTN_SPI_Pin BTN_USART_Pin */
   GPIO_InitStruct.Pin = BTN_SPI_Pin|BTN_USART_Pin;

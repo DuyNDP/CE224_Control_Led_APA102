@@ -11,7 +11,11 @@
 #include "main.h"
 #include "Config.h"
 
-uint8_t spi_led_buffer[BUFFER_SIZE];
+uint8_t spi_led_buffer[BUFFER_SIZE] = {0};
+
+void spi_update(void);
+void spi_set_led(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness);
+void spi_init_buffer(void);
 
 void spi_update(void)
 {

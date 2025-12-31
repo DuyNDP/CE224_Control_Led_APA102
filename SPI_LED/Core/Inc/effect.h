@@ -1,54 +1,69 @@
 /*
  * effect.h
- * Status: NON-BLOCKING & SYNCHRONIZED
+ * Status: UPDATED - Breathing (Case 0) Non-blocking
  */
 #ifndef INC_EFFECT_H_
 #define INC_EFFECT_H_
 
 #include <stdlib.h>
 #include <math.h>
-#include "knob.h"
 #include "SPI_LED.h"
 #include "UART_LED.h"
+#include "FFT.h"
+#include "knob.h"
+#include "button.h"
+
+// --- ĐỊNH NGHĨA ---
+#define STRIP_SPI  0
+#define STRIP_UART 1
+#define MODE_OFF   99
+#define ADC_THRESHOLD  100
 
 // --- BIẾN TOÀN CỤC ---
 float smoothed_val = 0.0f;
-uint16_t rainbow_hue = 0;
 extern volatile uint8_t effect_mode_spi;
 extern volatile uint8_t effect_mode_uart;
 extern volatile uint32_t brightness;
+extern float audio_peak_val;
+extern float audio_peak_hz;
 
-// Buffer cho hiệu ứng Mưa & Lửa
+// Buffer trạng thái
 static uint16_t rain_hues[NUM_LEDS];
 static uint8_t  rain_vals[NUM_LEDS];
 static uint8_t  fire_heat[NUM_LEDS];
 
-// Buffer màu tạm cho Matrix Rain
-uint8_t buffer_r[NUM_LEDS];
-uint8_t buffer_g[NUM_LEDS];
-uint8_t buffer_b[NUM_LEDS];
+void update_all_strips(void);
+void set_strip_color(uint8_t strip_type, uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness);
+void hsv_to_rgb(uint16_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_t *b);
+void effect_clear(uint8_t strip_type);
+void effect_breathing(uint8_t strip_type);
+void effect_vu_meter_smart(float vol, float hz, uint8_t strip_type);
+void effect_freq_color(float vol, float hz, uint8_t strip_type);
+void effect_rainbow_pulse(float vol, uint8_t strip_type);
+void effect_music_rain(float vol, float hz, uint8_t strip_type);
+void effect_fire(float vol, uint8_t strip_type);
+void effect_center_pulse(float vol, float hz, uint8_t strip_type);
+void process_audio_data(void);
+void brightness_update(void);
+void button_scan(void);
+void led_effects_manager(void);
+void led_init();
+void perform_system_reset(void);
 
-// Hàm cập nhật dữ liệu ra cả 2 cổng
+// ============================================================
+// 1. CÁC HÀM CƠ BẢN
+// ============================================================
+
 void update_all_strips(void) {
     spi_update();
     usart_update();
 }
 
-void led_init()
-{
-	spi_init_buffer();
-	usart_init_buffer();
-	update_all_strips();
+void set_strip_color(uint8_t strip_type, uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t brightness) {
+    if (strip_type == STRIP_SPI) spi_set_led(index, r, g, b, brightness);
+    else usart_set_led(index, r, g, b, brightness);
 }
 
-// --- HÀM SET MÀU CHUNG (QUAN TRỌNG) ---
-// Hàm này sẽ gán màu cho cả buffer SPI và buffer USART cùng lúc
-void set_pixel_color(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
-    spi_set_led(index, r, g, b, bright);
-    usart_set_led(index, r, g, b, bright);
-}
-
-// --- HÀM CHUYỂN ĐỔI MÀU (HSV -> RGB) ---
 void hsv_to_rgb(uint16_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_t *b) {
     uint8_t f = (h % 60) * 255 / 60;
     uint8_t p = (255 - s) * (uint16_t)v / 255;
@@ -65,260 +80,237 @@ void hsv_to_rgb(uint16_t h, uint8_t s, uint8_t v, uint8_t *r, uint8_t *g, uint8_
     }
 }
 
-// --- HIỆU ỨNG KHỞI ĐỘNG (BLOCKING) ---
-void effect_startup_breathing() {
-    uint16_t hue = 0;
+void effect_clear(uint8_t strip_type) {
+    for (int i = 0; i < NUM_LEDS; i++) set_strip_color(strip_type, i, 0, 0, 0, 0);
+}
+
+// ============================================================
+// 2. CÁC HIỆU ỨNG
+// ============================================================
+
+// --- HIỆU ỨNG THỞ (CASE 0 MỚI) ---
+// Logic: Fade In -> Fade Out -> Đổi màu
+void effect_breathing(uint8_t strip_type) {
+    // 1. Tạo sóng thở (Sine wave)
+    // Chia 700: Tốc độ thở (càng lớn càng chậm)
+    float val = (sin(HAL_GetTick() / 700.0f) + 1.0f) / 2.0f;
+
+    // 2. Gamma Correction (QUAN TRỌNG)
+    // Bình phương giá trị val (val * val) giúp đoạn tối sâu hơn, đoạn sáng dịu hơn.
+    // Nếu không có dòng này, đèn trông sẽ như luôn sáng và chỉ tối đi 1 chút.
+    float deep_breath = val * val;
+
+    // Đảm bảo không tắt hẳn (giữ lại 5% độ sáng thấp nhất để tạo nền)
+    if (deep_breath < 0.05f) deep_breath = 0.05f;
+
+    // 3. Tính toán màu RGB dựa trên độ sáng thở
+    // Thay vì chỉnh brightness phần cứng, ta chỉnh độ mạnh của màu (Value trong HSV)
+    // deep_breath * 255 sẽ cho ra giá trị từ 10 đến 255 -> Cực kỳ mượt
+    uint16_t hue = (HAL_GetTick() / 50) % 360;
     uint8_t r, g, b;
-    // Fade In
-    for (int val = 0; val <= 255; val += 5) {
-    	hsv_to_rgb(hue, 255, val, &r, &g, &b);
-    	// Dùng brightness/2 để không quá chói lúc khởi động
-        for (int i = 0; i < NUM_LEDS; i++) spi_set_led(i, r, g, b, brightness);
-        	spi_update();
-            HAL_Delay(30);
+
+    // Tham số thứ 3 (Value) nhận giá trị thở
+    hsv_to_rgb(hue, 255, (uint8_t)(deep_breath * 255), &r, &g, &b);
+
+    // 4. Xuất ra LED
+    for (int i = 0; i < NUM_LEDS; i++) {
+        // Lưu ý: Tham số cuối cùng giữ nguyên biến 'brightness' toàn cục (mức trần)
+        // Việc Fade in/out đã được xử lý bên trong r, g, b rồi.
+        set_strip_color(strip_type, i, r, g, b, brightness);
     }
-    // Fade Out
-    for (int val = 255; val >= 0; val -= 5) {
-    	hsv_to_rgb(hue, 255, val, &r, &g, &b);
-        for (int i = 0; i < NUM_LEDS; i++) set_pixel_color(i, r, g, b, brightness);
-        	update_all_strips(); // Gửi cả SPI và UART
-            HAL_Delay(30);
-    }
-    hue += 60;
-    if (hue >= 360) hue = 0;
 }
+// 1. Smart VU Meter
+void effect_vu_meter_smart(float vol, float hz, uint8_t strip_type) {
+    int height = (int)((vol / TARGET_MAX_VAL) * NUM_LEDS);
+    if (height > NUM_LEDS) height = NUM_LEDS;
 
-// --- 1. VU METER SMART ---
-void effect_vu_meter_smart(float vol, float hz) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 10) return;
-    last_tick = HAL_GetTick();
-
-    int num_lit = (int)((vol / TARGET_MAX_VAL) * NUM_LEDS);
-    if (num_lit > NUM_LEDS) num_lit = NUM_LEDS;
-
-    uint16_t base_hue = 0;
-    if (hz < 500.0f) base_hue = 0;        // Bass: Đỏ
-    else if (hz < 2000.0f) base_hue = 30; // Mid: Cam
-    else if (hz < 5000.0f) base_hue = 120;// High: Xanh lá
-    else base_hue = 200;                  // Treble: Xanh dương
-
+    uint16_t hue = (hz > 0) ? (uint16_t)((hz / 4000.0) * 300) : 0;
     uint8_t r, g, b;
-    for (int i = 0; i < NUM_LEDS; i++) {
-        if (i < num_lit) {
-            uint16_t pixel_hue = (base_hue + (i * 2)) % 360;
-            hsv_to_rgb(pixel_hue, 255, 255, &r, &g, &b);
-            spi_set_led(i, r, g, b, brightness);
-        } else {
-            spi_set_led(i, 0, 0, 0, 0);
-        }
-    }
-    spi_update();
-}
-
-// --- 2. FREQUENCY COLOR ---
-void effect_freq_color(float vol, float hz) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 15) return;
-    last_tick = HAL_GetTick();
-
-    uint8_t r = 0, g = 0, b = 0;
-    // Ngưỡng lọc nhiễu 100.0f
-    if (vol > 100.0f) {
-        if (hz < 300.0f)       { r = 255; g = 0;   b = 0; }
-        else if (hz < 1000.0f) { r = 255; g = 100; b = 0; }
-        else if (hz < 3000.0f) { r = 0;   g = 255; b = 0; }
-        else                   { r = 0;   g = 0;   b = 255; }
-
-        int width = (int)((vol / TARGET_MAX_VAL) * (NUM_LEDS / 2));
-        int center = NUM_LEDS / 2;
-
-        for (int i = 0; i < NUM_LEDS; i++) {
-            if (i >= center - width && i <= center + width)
-                spi_set_led(i, r, g, b, brightness);
-            else
-                spi_set_led(i, 0, 0, 0, 0);
-        }
-    } else {
-        for(int i=0; i<NUM_LEDS; i++) spi_set_led(i, 0,0,0,0);
-    }
-    spi_update();
-}
-
-// --- 3. RAINBOW PULSE ---
-void effect_rainbow_pulse(float vol) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 20) return;
-    last_tick = HAL_GetTick();
-
-    rainbow_hue += 2;
-    if (rainbow_hue >= 360) rainbow_hue = 0;
-
-    // Map volume to dynamic brightness (ít nhất là 1, tối đa là brightness)
-    uint8_t dyn_bright = (uint8_t)((vol / TARGET_MAX_VAL) * brightness);
-    if (dyn_bright > brightness) dyn_bright = brightness;
-    if (dyn_bright < 0) dyn_bright = 0;
-
-    uint8_t r, g, b;
-    for (int i = 0; i < NUM_LEDS; i++) {
-        uint16_t pixel_hue = (rainbow_hue + (i * 360 / NUM_LEDS)) % 360;
-        hsv_to_rgb(pixel_hue, 255, 255, &r, &g, &b);
-        spi_set_led(i, r, g, b, dyn_bright);
-    }
-    spi_update();
-}
-
-// --- 4. MUSIC RAIN SPARKLE ---
-void effect_music_rain(float vol, float hz) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 15) return;
-    last_tick = HAL_GetTick();
-
-    int fade_speed = 10;
-    for (int i = 0; i < NUM_LEDS; i++) {
-        if (rain_vals[i] > fade_speed) rain_vals[i] -= fade_speed;
-        else rain_vals[i] = 0;
-    }
-
-    int drops_to_spawn = 0;
-    if (vol > 100.0f) drops_to_spawn = (int)((vol / TARGET_MAX_VAL) * 5); // Giảm hệ số spawn xuống chút cho đỡ rối
-    if (drops_to_spawn > NUM_LEDS / 4) drops_to_spawn = NUM_LEDS / 4;
-
-    uint16_t current_hue = 0;
-    if (hz > 0) current_hue = (uint16_t)((hz / 4000.0) * 300);
-
-    for (int k = 0; k < drops_to_spawn; k++) {
-        int pos = rand() % NUM_LEDS;
-        if (rain_vals[pos] < 50) {
-            rain_hues[pos] = current_hue;
-            rain_vals[pos] = 255;
-        }
-    }
+    hsv_to_rgb(hue, 255, 255, &r, &g, &b);
 
     for (int i = 0; i < NUM_LEDS; i++) {
-        if (rain_vals[i] > 0) {
-            uint8_t r, g, b;
-            hsv_to_rgb(rain_hues[i], 255, rain_vals[i], &r, &g, &b);
-            spi_set_led(i, r, g, b, brightness);
-        } else {
-            spi_set_led(i, 0, 0, 0, 0);
-        }
+        if (i < height) set_strip_color(strip_type, i, r, g, b, brightness);
+        else set_strip_color(strip_type, i, 0, 0, 0, 0);
     }
-    spi_update();
 }
 
-// --- 5. FALLING RAIN MATRIX ---
-void effect_falling_rain(float vol, float hz, int speed_ms) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < speed_ms) return;
-    last_tick = HAL_GetTick();
-
-    for (int i = NUM_LEDS - 1; i > 0; i--) {
-        buffer_r[i] = (uint8_t)(buffer_r[i-1] * 0.8); // Làm mờ nhanh hơn chút (0.8)
-        buffer_g[i] = (uint8_t)(buffer_g[i-1] * 0.8);
-        buffer_b[i] = (uint8_t)(buffer_b[i-1] * 0.8);
-    }
-
-    if (vol > 150.0f) {
-        uint8_t r, g, b;
-        uint16_t hue = 0;
-        if(hz > 0) hue = (uint16_t)((hz / 4000.0) * 300);
-        hsv_to_rgb(hue, 255, 255, &r, &g, &b);
-        buffer_r[0] = r; buffer_g[0] = g; buffer_b[0] = b;
-    } else {
-        buffer_r[0] = 0; buffer_g[0] = 0; buffer_b[0] = 0;
-    }
-
-    for (int i = 0; i < NUM_LEDS; i++) {
-        spi_set_led(i, buffer_r[i], buffer_g[i], buffer_b[i], brightness);
-    }
-    spi_update();
-}
-
-// --- 6. FIRE EFFECT ---
-void effect_fire(float vol) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 20) return;
-    last_tick = HAL_GetTick();
-
-    for( int i = 0; i < NUM_LEDS; i++) {
-        int cooldown = (rand() % 10) + 2;
-        if(cooldown > fire_heat[i]) fire_heat[i] = 0;
-        else fire_heat[i] = fire_heat[i] - cooldown;
-    }
-
-    for( int k = NUM_LEDS - 1; k >= 3; k--) {
-        fire_heat[k] = (fire_heat[k - 1] + fire_heat[k - 2] + fire_heat[k - 2]) / 3;
-    }
-
-    if( vol > 50.0f ) {
-        int heat_input = (int)((vol / TARGET_MAX_VAL) * 255);
-        if(heat_input > 255) heat_input = 255;
-        fire_heat[0] = heat_input;
-        fire_heat[1] = (uint8_t)(heat_input * 0.8);
-    }
-
-    for( int j = 0; j < NUM_LEDS; j++) {
-        uint8_t temperature = fire_heat[j];
-        uint8_t r, g, b;
-        uint8_t t192 = (uint8_t)((temperature / 255.0) * 191);
-        uint8_t heatramp = t192 & 0x3F; heatramp <<= 2;
-
-        if( t192 > 0x80) { r = 255; g = 255; b = heatramp; }
-        else if( t192 > 0x40 ) { r = 255; g = heatramp; b = 0; }
-        else { r = heatramp; g = 0; b = 0; }
-
-        spi_set_led(j, r, g, b, brightness);
-    }
-    spi_update();
-}
-
-// --- 7. CENTER PULSE ---
-void effect_center_pulse(float vol, float hz) {
-    static uint32_t last_tick = 0;
-    if (HAL_GetTick() - last_tick < 10) return;
-    last_tick = HAL_GetTick();
-
+// 2. Freq Color
+void effect_freq_color(float vol, float hz, uint8_t strip_type) {
     int center = NUM_LEDS / 2;
     int width = (int)((vol / TARGET_MAX_VAL) * center);
-    if (width > center) width = center;
 
-    uint16_t hue = 0;
-    if (hz > 0) hue = (uint16_t)((hz / 4000.0) * 300);
+    uint16_t hue = (hz > 0) ? (uint16_t)((hz / 4000.0) * 300) : 0;
     uint8_t r, g, b;
     hsv_to_rgb(hue, 255, 255, &r, &g, &b);
 
     for (int i = 0; i < NUM_LEDS; i++) {
         if (i >= (center - width) && i <= (center + width))
-            spi_set_led(i, r, g, b, brightness);
-        else
-            spi_set_led(i, 0, 0, 0, 0);
+             set_strip_color(strip_type, i, r, g, b, brightness);
+        else set_strip_color(strip_type, i, 0, 0, 0, 0);
     }
-    spi_update();
 }
 
-// --- QUẢN LÝ CHÍNH ---
-void led_effects_manager(float raw_vol, float raw_hz) {
-    // 1. Lọc tín hiệu (Smoothing)
+// 3. Rainbow Pulse
+void effect_rainbow_pulse(float vol, uint8_t strip_type) {
+    static uint16_t hue_counter = 0;
+    hue_counter++;
+    uint8_t r, g, b;
+    hsv_to_rgb(hue_counter % 360, 255, 255, &r, &g, &b);
+
+    uint8_t dyn_bright = (uint8_t)((vol / TARGET_MAX_VAL) * brightness);
+    if (dyn_bright > brightness) dyn_bright = brightness;
+
+    for (int i = 0; i < NUM_LEDS; i++) set_strip_color(strip_type, i, r, g, b, dyn_bright);
+}
+
+// 4. Music Rain
+void effect_music_rain(float vol, float hz, uint8_t strip_type) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+        if (rain_vals[i] > 2) rain_vals[i] -= 2; else rain_vals[i] = 0;
+    }
+    if (vol > 1000) {
+        int pos = rand() % NUM_LEDS;
+        rain_vals[pos] = brightness;
+        rain_hues[pos] = (uint16_t)((hz / 4000.0) * 300);
+    }
+    uint8_t r, g, b;
+    for (int i = 0; i < NUM_LEDS; i++) {
+        if (rain_vals[i] > 0) {
+            hsv_to_rgb(rain_hues[i], 255, 255, &r, &g, &b);
+            set_strip_color(strip_type, i, r, g, b, rain_vals[i]);
+        } else set_strip_color(strip_type, i, 0, 0, 0, 0);
+    }
+}
+
+// 5. Fire (Hiệu ứng Lửa thực tế)
+void effect_fire(float vol, uint8_t strip_type) {
+    // 1. Cooling (Làm nguội - Tạo các khoảng tối ngẫu nhiên)
+    for (int i = 0; i < NUM_LEDS; i++) {
+        int cooldown = (rand() % 10);
+        // Trừ nhiệt độ đi, đảm bảo không âm
+        if (fire_heat[i] >= cooldown) fire_heat[i] -= cooldown;
+        else fire_heat[i] = 0;
+    }
+
+    // 2. Drifting (Bốc hơi nhiệt từ dưới lên trên)
+    for (int i = NUM_LEDS - 1; i >= 2; i--) {
+        // Công thức trung bình cộng để làm mượt chuyển động
+        fire_heat[i] = (fire_heat[i - 1] + fire_heat[i - 2] + fire_heat[i - 2]) / 3;
+    }
+
+    // 3. Ignition (Mồi lửa theo âm lượng)
+    if (vol > 500) { // Ngưỡng kích hoạt
+        int ignition = (int)(vol / 150.0f); // Tăng độ nhạy một chút
+        if (ignition > 255) ignition = 255;
+
+        // Mồi lửa vào chân (LED 0 và 1)
+        // Dùng phép OR hoặc MAX để tránh làm tối đi nếu đang cháy to
+        if (ignition > fire_heat[0]) fire_heat[0] = ignition;
+        if (ignition > fire_heat[1]) fire_heat[1] = ignition;
+    }
+
+    // 4. Mapping (Chuyển nhiệt độ thành màu sắc)
+    for (int i = 0; i < NUM_LEDS; i++) {
+        uint8_t r, g, b;
+        uint8_t heat = fire_heat[i];
+
+        // Dùng chính 'heat' làm độ sáng (Value) cho hàm hsv_to_rgb
+        // Điều này giúp ngọn lửa tắt dần tự nhiên ở phía trên
+
+        if (strip_type == STRIP_SPI) {
+            // --- FIRE MODE (Đỏ -> Vàng -> Trắng) ---
+            // Scale heat (0-255) sang Hue (0-85 là vùng Đỏ-Cam-Vàng)
+            uint16_t pixel_hue = (heat / 3);
+
+            // Tham số thứ 3 là 'heat' -> Nhiệt thấp thì đèn tối
+            hsv_to_rgb(pixel_hue, 255, heat, &r, &g, &b);
+        }
+        else {
+            // --- ICE MODE (Xanh đậm -> Xanh nhạt -> Trắng) ---
+            // Hue 160 (Xanh lam) -> 240 (Xanh dương)
+            uint16_t pixel_hue = 160 + (heat / 3);
+
+            // Với băng, có thể giữ Saturation giảm dần để ra màu trắng khi sáng nhất
+            hsv_to_rgb(pixel_hue, 255 - (heat/4), heat, &r, &g, &b);
+        }
+
+        // Set màu ra LED
+        // brightness: Biến toàn cục chỉnh độ sáng tổng (Dimmer)
+        set_strip_color(strip_type, i, r, g, b, brightness);
+    }
+}
+
+// 6. Center Pulse
+void effect_center_pulse(float vol, float hz, uint8_t strip_type) {
+    int center = NUM_LEDS / 2;
+    int len = (int)((vol / TARGET_MAX_VAL) * center);
+    uint16_t hue = (uint16_t)((hz / 4000.0) * 300);
+    uint8_t r, g, b;
+    hsv_to_rgb(hue, 255, 255, &r, &g, &b);
+    for (int i = 0; i < NUM_LEDS; i++) {
+        if (abs(i - center) < len) set_strip_color(strip_type, i, r, g, b, brightness);
+        else set_strip_color(strip_type, i, 0, 0, 0, 0);
+    }
+}
+// ============================================================
+// 3. TRÌNH QUẢN LÝ (MANAGER)
+// ============================================================
+
+void led_effects_manager(void) {
+	process_audio_data();
+	brightness_update();
+	button_scan();
+	float raw_vol = audio_peak_val;
+	float raw_hz = audio_peak_hz;
     smoothed_val = (smoothed_val * 0.6f) + (raw_vol * 0.4f);
 
-    // 2. Chọn hiệu ứng
+    // ================= XỬ LÝ DÂY SPI =================
     switch (effect_mode_spi) {
-    	case 0: effect_vu_meter_smart(smoothed_val, raw_hz); break;
-        case 1: effect_vu_meter_smart(smoothed_val, raw_hz); break;
-        case 2: effect_freq_color(smoothed_val, raw_hz); break;
-        case 3: effect_rainbow_pulse(smoothed_val); break;
-        case 4: effect_music_rain(smoothed_val, raw_hz); break;
-        case 5: effect_falling_rain(smoothed_val, raw_hz, 40); break;
-        case 6: effect_fire(smoothed_val); break;
-        case 7: effect_center_pulse(smoothed_val, raw_hz); break;
-        default:
-        	effect_vu_meter_smart(smoothed_val, raw_hz);
-        	break;
+        case 0: effect_breathing(STRIP_SPI); break;
+        case 1: effect_vu_meter_smart(smoothed_val, raw_hz, STRIP_SPI); break;
+        case 2: effect_freq_color(smoothed_val, raw_hz, STRIP_SPI); break;
+        case 3: effect_rainbow_pulse(smoothed_val, STRIP_SPI); break;
+        case 4: effect_music_rain(smoothed_val, raw_hz, STRIP_SPI); break;
+        case 5: effect_fire(smoothed_val, STRIP_SPI); break;
+        case 6: effect_center_pulse(smoothed_val, raw_hz, STRIP_SPI); break;
+        case MODE_OFF: effect_clear(STRIP_SPI); break;
+        default: effect_breathing(STRIP_SPI); break;
+    }
+
+    // ================= XỬ LÝ DÂY USART =================
+    switch (effect_mode_uart) {
+    	case 0: effect_breathing(STRIP_UART); break;
+        case 1: effect_vu_meter_smart(smoothed_val, raw_hz, STRIP_UART); break;
+        case 2: effect_freq_color(smoothed_val, raw_hz, STRIP_UART); break;
+        case 3: effect_rainbow_pulse(smoothed_val, STRIP_UART); break;
+        case 4: effect_music_rain(smoothed_val, raw_hz, STRIP_UART); break;
+        case 5: effect_fire(smoothed_val, STRIP_UART); break;
+        case 6: effect_center_pulse(smoothed_val, raw_hz, STRIP_UART); break;
+        case MODE_OFF: effect_clear(STRIP_UART); break;
+        default: effect_breathing(STRIP_UART); break;
     }
     update_all_strips();
 }
 
+void led_init() {
+    usart_init_buffer();
+    spi_init_buffer();
+    update_all_strips();
+}
+
+// Hàm Reset hệ thống:
+void perform_system_reset(void) {
+    effect_mode_spi = 99;
+    effect_mode_uart = 99;
+
+    effect_clear(STRIP_SPI);
+    effect_clear(STRIP_UART);
+    update_all_strips();
+    HAL_Delay(3000);
+
+    effect_mode_spi = 0;
+    effect_mode_uart = 0;
+}
 
 
 #endif /* INC_EFFECT_H_ */
