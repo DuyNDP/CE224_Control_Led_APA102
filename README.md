@@ -66,3 +66,10 @@ The project follows a **Modular Header Implementation** pattern. All functional 
    - Open `Web/index.html` in Chrome or Edge.
    - Click **Connect** and select the HC-05 COM Port.
    - Listen for the "Connected" sound and use the dashboard to control the system.
+  
+## 👥 Authors & Contributors
+
+* **Nguyen Trong Bao Duy** - [Thorlion](https://github.com/Thorlion)
+* **Nguyen Dang Phuong Duy** - [DuyNDP](https://github.com/DuyNDP)
+* **Vu Dai Duong** - [VuDaiDuong_325](https://github.com/VuDaiDuong-325)
+*  **Phan Thanh Duy**
